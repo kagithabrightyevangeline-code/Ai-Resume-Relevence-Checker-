@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useLayoutEffect } from 'react';
 import { Header } from './components/Header';
 import { InputForm } from './components/InputForm';
 import { DocumentDisplay } from './components/DocumentDisplay';
@@ -19,6 +19,37 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessage, setProgressMessage] = useState<string>('');
+  const appRef = useRef<HTMLDivElement>(null);
+
+  // This effect will measure the app's height and post it to the parent window (e.g., Streamlit).
+  // This allows the iframe to resize dynamically, avoiding scrollbars.
+  useLayoutEffect(() => {
+    const appElement = appRef.current;
+    if (!appElement) return;
+
+    const sendHeight = () => {
+      const height = appElement.scrollHeight;
+      // The message format `{ type: 'setHeight', height: ... }` is a common convention
+      // that can be handled by the Streamlit component listener.
+      window.parent.postMessage({ type: 'setHeight', height }, '*');
+    };
+
+    // Use ResizeObserver to detect size changes of the component
+    const resizeObserver = new ResizeObserver(sendHeight);
+    resizeObserver.observe(appElement);
+
+    // Use MutationObserver to detect changes in the DOM tree (e.g., when results are added)
+    const mutationObserver = new MutationObserver(sendHeight);
+    mutationObserver.observe(appElement, { childList: true, subtree: true });
+
+    // Send initial height
+    sendHeight();
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, []);
 
   const getHiringProbability = (score: number): 'High' | 'Medium' | 'Low' => {
     if (score > 60) return 'High';
@@ -88,7 +119,7 @@ const App: React.FC = () => {
   }, []);
 
   return (
-    <div className="bg-gray-900 text-gray-200 font-sans">
+    <div ref={appRef} className="bg-gray-900 text-gray-200 font-sans">
       <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
